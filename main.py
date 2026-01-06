@@ -9,13 +9,12 @@ import os
 
 # --- 設定 ---
 st.set_page_config(page_title="森林ナレッジチャットボット(Gemini版)", page_icon="🌲")
-st.title("🌲 森林経営ナレッジボット (Gemini)")
+st.title("🌲 森林経営ナレッジボット (Gemini 2.5)")
 
-# APIキーの取得（UI入力またはSecretsから）
+# APIキーの取得
 if "GOOGLE_API_KEY" not in st.session_state:
     st.session_state.GOOGLE_API_KEY = ""
 
-# StreamlitのSecretsに設定されているか確認、なければサイドバーで入力
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
 else:
@@ -25,10 +24,9 @@ if not api_key:
     st.info("左のサイドバーにGoogle APIキーを入力してください")
     st.stop()
 
-# 環境変数にセット
 os.environ["GOOGLE_API_KEY"] = api_key
 
-# --- RAG構築 (キャッシュ化して高速化) ---
+# --- RAG構築 ---
 @st.cache_resource
 def build_vector_store():
     # データの読み込み
@@ -39,8 +37,9 @@ def build_vector_store():
     )
     docs = loader.load()
     
-    # ベクトル化（GeminiのEmbeddingモデルを使用）
-    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+    # 【修正箇所1】 先頭に 'models/' を追加してください
+    # APIの仕様上、Embeddingにはこのプレフィックスが必須の場合が多いです
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
     
     # ベクトルストアの作成
     vectorstore = FAISS.from_documents(docs, embeddings)
@@ -68,7 +67,7 @@ prompt_template = """あなたは森林経営の専門家です。以下の「�
 PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 
 # --- Geminiモデルの設定 ---
-# gemini-1.5-flash は高速でコスト効率が良いモデルです
+# 【修正箇所2】 最新の2.5-flashを指定
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
 qa_chain = RetrievalQA.from_chain_type(
@@ -92,7 +91,7 @@ if prompt := st.chat_input("質問を入力してください..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Geminiが思考中..."):
+        with st.spinner("Gemini 2.5 が思考中..."):
             try:
                 response = qa_chain.invoke({"query": prompt})
                 answer = response['result']
