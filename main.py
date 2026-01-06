@@ -17,7 +17,7 @@ from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 
 # --- 設定 ---
-st.set_page_config(page_title="森林ナレッジチャットボット(Gemini版)", page_icon="🌲")
+st.set_page_config(page_title="森林ナレッジチャットボット(Gemini版)", page_icon="🌲", layout="wide")
 st.title("🌲 森林経営ナレッジボット (Gemini 2.5)")
 
 # APIキーの取得
@@ -38,16 +38,27 @@ os.environ["GOOGLE_API_KEY"] = api_key
 # --- RAG構築 ---
 @st.cache_resource
 def build_vector_store():
-    # データの読み込み
+    # 【修正1】エンコーディングを 'utf-8-sig' に変更 (BOM付きCSVに対応)
     loader = CSVLoader(
         file_path="data/森林ナレッジ.csv",
-        encoding="utf-8",
-        source_column="質問 (Question)"
+        encoding="utf-8-sig", 
+        source_column="質問 (Question)",
+        csv_args={
+            'delimiter': ',',
+            'quotechar': '"'
+        }
     )
     docs = loader.load()
     
+    # デバッグ情報の表示（サイドバー）
+    if len(docs) > 0:
+        st.sidebar.success(f"📚 データ読み込み成功: {len(docs)}件")
+        with st.sidebar.expander("データの先頭を確認"):
+            st.text(docs[0].page_content)
+    else:
+        st.sidebar.error("⚠️ データが読み込めませんでした")
+
     # Embeddingモデル
-    # models/text-embedding-004 は最新で正しいです
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     
     # ベクトルストアの作成
@@ -56,7 +67,7 @@ def build_vector_store():
 
 try:
     vectorstore = build_vector_store()
-    # 【修正1】検索数 k を 3 -> 5 に増やして取りこぼしを防ぐ
+    # 検索数 k=5
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
 except Exception as e:
     st.error(f"データの読み込みに失敗しました: {e}")
@@ -77,12 +88,8 @@ prompt_template = """あなたは森林経営の専門家です。以下の「�
 PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 
 # --- Geminiモデルの設定 ---
-# 【修正2】 正しいチャットモデル名に変更
-# gemini-2.5-flash は存在しません。gemini-1.5-flash を指定します。
-# 注意: LangChainでは "models/" を付けずに指定する方が安定することがあります。
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
-# 【修正3】 return_source_documents=True を追加して、検索結果を確認できるようにする
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
@@ -105,20 +112,19 @@ if prompt := st.chat_input("質問を入力してください..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Gemini 1.5 が思考中..."):
+        with st.spinner("Gemini 2.5 が思考中..."):
             try:
-                # invokeで実行
                 response = qa_chain.invoke({"query": prompt})
                 answer = response['result']
-                source_docs = response['source_documents'] # 検索されたドキュメント
+                source_docs = response['source_documents']
 
                 st.markdown(answer)
                 
-                # 【修正4】デバッグ用：何が検索されたかを表示
-                # これで「なぜ情報がないと言われたか」がわかります
+                # 参照データの確認エリア
                 with st.expander("🔍 参照したデータを確認する"):
                     for i, doc in enumerate(source_docs):
                         st.markdown(f"**ランク {i+1}**")
+                        # page_contentを表示して、検索が正しいか確認
                         st.text(doc.page_content)
 
                 st.session_state.messages.append({"role": "assistant", "content": answer})
