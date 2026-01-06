@@ -1,29 +1,32 @@
 import streamlit as st
 from langchain_community.document_loaders import CSVLoader
-from langchain_openai import OpenAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 import os
 
 # --- 設定 ---
-st.set_page_config(page_title="森林ナレッジチャットボット", page_icon="🌲")
-st.title("🌲 森林経営ナレッジボット")
+st.set_page_config(page_title="森林ナレッジチャットボット(Gemini版)", page_icon="🌲")
+st.title("🌲 森林経営ナレッジボット (Gemini)")
 
-# APIキーの取得（Streamlit Secretsから読み込む安全な方法）
-# ローカルで動かす場合は .streamlit/secrets.toml が必要ですが、
-# UI上で入力させる簡易版として以下のように書くことも可能です。
-if "OPENAI_API_KEY" not in st.session_state:
-    st.session_state.OPENAI_API_KEY = ""
+# APIキーの取得（UI入力またはSecretsから）
+if "GOOGLE_API_KEY" not in st.session_state:
+    st.session_state.GOOGLE_API_KEY = ""
 
-api_key = st.sidebar.text_input("OpenAI API Key", type="password")
+# StreamlitのSecretsに設定されているか確認、なければサイドバーで入力
+if "GOOGLE_API_KEY" in st.secrets:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+else:
+    api_key = st.sidebar.text_input("Google API Key", type="password")
 
 if not api_key:
-    st.info("左のサイドバーにOpenAI APIキーを入力してください")
+    st.info("左のサイドバーにGoogle APIキーを入力してください")
     st.stop()
-else:
-    os.environ["OPENAI_API_KEY"] = api_key
+
+# 環境変数にセット
+os.environ["GOOGLE_API_KEY"] = api_key
 
 # --- RAG構築 (キャッシュ化して高速化) ---
 @st.cache_resource
@@ -32,12 +35,14 @@ def build_vector_store():
     loader = CSVLoader(
         file_path="data/森林ナレッジ.csv",
         encoding="utf-8",
-        source_column="質問 (Question)" # 検索精度向上のため質問文を検索対象にする
+        source_column="質問 (Question)"
     )
     docs = loader.load()
     
-    # ベクトル化と保存
-    embeddings = OpenAIEmbeddings()
+    # ベクトル化（GeminiのEmbeddingモデルを使用）
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    
+    # ベクトルストアの作成
     vectorstore = FAISS.from_documents(docs, embeddings)
     return vectorstore
 
@@ -62,8 +67,10 @@ prompt_template = """あなたは森林経営の専門家です。以下の「�
 
 PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 
-# --- LLMとChainの定義 ---
-llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+# --- Geminiモデルの設定 ---
+# gemini-1.5-flash は高速でコスト効率が良いモデルです
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
@@ -75,23 +82,18 @@ qa_chain = RetrievalQA.from_chain_type(
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 過去の履歴を表示
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# ユーザー入力の処理
 if prompt := st.chat_input("質問を入力してください..."):
-    # ユーザーのメッセージを表示
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # AIの回答生成
     with st.chat_message("assistant"):
-        with st.spinner("資料を検索中..."):
+        with st.spinner("Geminiが思考中..."):
             try:
-                # invokeを使用して回答を取得
                 response = qa_chain.invoke({"query": prompt})
                 answer = response['result']
                 st.markdown(answer)

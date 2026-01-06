@@ -1,7 +1,5 @@
 streamlit
 langchain
-langchain-openai
 langchain-community
+langchain-google-genai
 faiss-cpu
-openai
-tiktoken
