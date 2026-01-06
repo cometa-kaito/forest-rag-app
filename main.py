@@ -69,7 +69,7 @@ PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "q
 
 # --- Geminiモデルの設定 ---
 # gemini-1.5-flash は高速でコスト効率が良いモデルです
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
