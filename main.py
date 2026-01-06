@@ -40,7 +40,7 @@ def build_vector_store():
     docs = loader.load()
     
     # ベクトル化（GeminiのEmbeddingモデルを使用）
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
     
     # ベクトルストアの作成
     vectorstore = FAISS.from_documents(docs, embeddings)
