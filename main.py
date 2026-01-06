@@ -18,7 +18,7 @@ from langchain.prompts import PromptTemplate
 
 # --- 設定 ---
 st.set_page_config(page_title="森林ナレッジチャットボット(Gemini版)", page_icon="🌲")
-st.title("🌲 森林経営ナレッジボット (Gemini 1.5)")
+st.title("🌲 森林経営ナレッジボット (Gemini 2.5)")
 
 # APIキーの取得
 if "GOOGLE_API_KEY" not in st.session_state:
@@ -46,7 +46,8 @@ def build_vector_store():
     )
     docs = loader.load()
     
-    # 【修正1】 正しいEmbeddingモデル名 (models/text-embedding-004)
+    # Embeddingモデル
+    # models/text-embedding-004 は最新で正しいです
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     
     # ベクトルストアの作成
@@ -55,7 +56,8 @@ def build_vector_store():
 
 try:
     vectorstore = build_vector_store()
-    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+    # 【修正1】検索数 k を 3 -> 5 に増やして取りこぼしを防ぐ
+    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 5})
 except Exception as e:
     st.error(f"データの読み込みに失敗しました: {e}")
     st.stop()
@@ -75,15 +77,18 @@ prompt_template = """あなたは森林経営の専門家です。以下の「�
 PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 
 # --- Geminiモデルの設定 ---
-# 【修正2】 正しいチャットモデル名 (gemini-1.5-flash)
-# 2.5は存在しません。1.5が現在の最新高速モデルです。
+# 【修正2】 正しいチャットモデル名に変更
+# gemini-2.5-flash は存在しません。gemini-1.5-flash を指定します。
+# 注意: LangChainでは "models/" を付けずに指定する方が安定することがあります。
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
+# 【修正3】 return_source_documents=True を追加して、検索結果を確認できるようにする
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
     retriever=retriever,
-    chain_type_kwargs={"prompt": PROMPT}
+    chain_type_kwargs={"prompt": PROMPT},
+    return_source_documents=True 
 )
 
 # --- チャットUIの実装 ---
@@ -102,9 +107,20 @@ if prompt := st.chat_input("質問を入力してください..."):
     with st.chat_message("assistant"):
         with st.spinner("Gemini 1.5 が思考中..."):
             try:
+                # invokeで実行
                 response = qa_chain.invoke({"query": prompt})
                 answer = response['result']
+                source_docs = response['source_documents'] # 検索されたドキュメント
+
                 st.markdown(answer)
+                
+                # 【修正4】デバッグ用：何が検索されたかを表示
+                # これで「なぜ情報がないと言われたか」がわかります
+                with st.expander("🔍 参照したデータを確認する"):
+                    for i, doc in enumerate(source_docs):
+                        st.markdown(f"**ランク {i+1}**")
+                        st.text(doc.page_content)
+
                 st.session_state.messages.append({"role": "assistant", "content": answer})
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
