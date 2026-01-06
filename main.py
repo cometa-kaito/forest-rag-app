@@ -1,15 +1,24 @@
 import streamlit as st
+import asyncio
+import os
+
+# --- 【重要】Streamlitで非同期処理エラーを防ぐためのおまじない ---
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
 from langchain_community.document_loaders import CSVLoader
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
-import os
 
 # --- 設定 ---
 st.set_page_config(page_title="森林ナレッジチャットボット(Gemini版)", page_icon="🌲")
-st.title("🌲 森林経営ナレッジボット (Gemini 2.5)")
+st.title("🌲 森林経営ナレッジボット (Gemini 1.5)")
 
 # APIキーの取得
 if "GOOGLE_API_KEY" not in st.session_state:
@@ -37,9 +46,8 @@ def build_vector_store():
     )
     docs = loader.load()
     
-    # 【修正箇所1】 先頭に 'models/' を追加してください
-    # APIの仕様上、Embeddingにはこのプレフィックスが必須の場合が多いです
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
+    # 【修正1】 正しいEmbeddingモデル名 (models/text-embedding-004)
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     
     # ベクトルストアの作成
     vectorstore = FAISS.from_documents(docs, embeddings)
@@ -67,8 +75,9 @@ prompt_template = """あなたは森林経営の専門家です。以下の「�
 PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 
 # --- Geminiモデルの設定 ---
-# 【修正箇所2】 最新の2.5-flashを指定
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+# 【修正2】 正しいチャットモデル名 (gemini-1.5-flash)
+# 2.5は存在しません。1.5が現在の最新高速モデルです。
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
 
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
@@ -91,7 +100,7 @@ if prompt := st.chat_input("質問を入力してください..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Gemini 2.5 が思考中..."):
+        with st.spinner("Gemini 1.5 が思考中..."):
             try:
                 response = qa_chain.invoke({"query": prompt})
                 answer = response['result']
