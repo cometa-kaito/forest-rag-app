@@ -77,7 +77,7 @@ PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "q
 # --- Geminiモデルの設定 ---
 # 【修正2】 正しいチャットモデル名 (gemini-1.5-flash)
 # 2.5は存在しません。1.5が現在の最新高速モデルです。
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
